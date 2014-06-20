@@ -47,8 +47,10 @@ class PayPal {
       "X-PAYPAL-RESPONSE-DATA-FORMAT: JSON",
     );
 
-    if($config['appid'] == "") $header[] = "X-PAYPAL-APPLICATION-ID: APP-80W284485P519543T";
-    else $header[] = "X-PAYPAL-APPLICATION-ID: ".$config['appid'];
+    if(array_key_exists('appid', $config) && !empty($config['appid']))
+      $header[] = "X-PAYPAL-APPLICATION-ID: ".$config['appid'];
+    else
+      $header[] = "X-PAYPAL-APPLICATION-ID: APP-80W284485P519543T";
 
     return $header;
   }
