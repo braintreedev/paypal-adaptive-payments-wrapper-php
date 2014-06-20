@@ -18,20 +18,12 @@ class PayPal {
     $this->config = $config;
   }
 
-  public function call($options = [], $calltype) {
-
-        if (dirname($_SERVER['PHP_SELF']) == "/") $folder = "";
-        else $folder = dirname($_SERVER['PHP_SELF']);
-
-        $options['returnUrl'] = 'http://'.$_SERVER['HTTP_HOST'].$folder.'/success.php?'.strtolower($calltype).'key=${'.$calltype.'key}';
-        $options['cancelUrl'] = 'http://'.$_SERVER['HTTP_HOST'].$folder.'/cancel.php';
-
-    return $this->_curl($this->api_url($calltype), $options, $this->headers($this->config));
-
+  public function call($options = [], $method) {
+    $this->prepare($options);
+    return $this->_curl($this->api_url($method), $options, $this->headers($this->config));
   }
 
   public function redirect($response) {
-
     if(@$response["payKey"]) $redirect_url = sprintf("%s?cmd=_ap-payment&paykey=%s", $this->redirect_url(), $response["payKey"]);
     else $redirect_url = sprintf("%s?cmd=_ap-preapproval&preapprovalkey=%s", $this->redirect_url(), $response["preapprovalKey"]);
 
@@ -42,25 +34,24 @@ class PayPal {
     return $this->urls[$this->config["environment"]]["redirect"];
   }
 
-  private function api_url($calltype) {
-    return $this->urls[$this->config["environment"]]["api"].$calltype;
+  private function api_url($method) {
+    return $this->urls[$this->config["environment"]]["api"].$method;
   }
 
-    private function headers($config){
+  private function headers($config){
+    $header = array(
+      "X-PAYPAL-SECURITY-USERID: ".$config['userid'],
+      "X-PAYPAL-SECURITY-PASSWORD: ".$config['password'],
+      "X-PAYPAL-SECURITY-SIGNATURE: ".$config['signature'],
+      "X-PAYPAL-REQUEST-DATA-FORMAT: JSON",
+      "X-PAYPAL-RESPONSE-DATA-FORMAT: JSON",
+    );
 
-        $header = array(
-            "X-PAYPAL-SECURITY-USERID: ".$config['userid'],
-            "X-PAYPAL-SECURITY-PASSWORD: ".$config['password'],
-            "X-PAYPAL-SECURITY-SIGNATURE: ".$config['signature'],
-            "X-PAYPAL-REQUEST-DATA-FORMAT: JSON",
-            "X-PAYPAL-RESPONSE-DATA-FORMAT: JSON",
-        );
+    if($config['appid'] == "") $header[] = "X-PAYPAL-APPLICATION-ID: APP-80W284485P519543T";
+    else $header[] = "X-PAYPAL-APPLICATION-ID: ".$config['appid'];
 
-        if($config['appid'] == "") $header[] = "X-PAYPAL-APPLICATION-ID: APP-80W284485P519543T";
-        else $header[] = "X-PAYPAL-APPLICATION-ID: ".$config['appid'];
-
-        return $header;
-    }
+    return $header;
+  }
 
   private function _curl($url, $values, $header) {
     $curl = curl_init($url);
@@ -84,5 +75,42 @@ class PayPal {
 
     return $response;
 
+  }
+
+  private function prepare(&$options) {
+    $this->expand_urls($options);
+    $this->merge_defaults($options);
+  }
+
+  private function expand_urls(&$options) {
+    $regex = '#^https?://#i';
+    if(array_key_exists('returnUrl', $options) && !preg_match($regex, $options['returnUrl'])) {
+      $this->expand_url($options['returnUrl']);
+    }
+
+    if(array_key_exists('cancelUrl', $options) && !preg_match($regex, $options['cancelUrl'])) {
+      $this->expand_url($options['cancelUrl']);
+    }
+  }
+
+  private function expand_url(&$url) {
+    $current_host = (isset($_SERVER['HTTPS']) ? "https" : "http") . "://{$_SERVER["HTTP_HOST"]}";
+    if(preg_match("#^/#i", $url)) {
+      $url = $current_host.$url;
+    }
+    else {
+      $directory = dirname($_SERVER['PHP_SELF']);
+      $url = $current_host.$directory.$url;
+    }
+  }
+
+  private function merge_defaults(&$options) {
+    $defaults = array(
+      'requestEnvelope' => array(
+        'errorLanguage' => 'en_US',
+      )
+    );
+
+    $options = array_merge($defaults, $options);
   }
 }
